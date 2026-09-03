@@ -5,8 +5,9 @@ from tim_2026.config import ExperimentConfig, ModelConfig
 
 def test_canonical_pect_config_is_locked() -> None:
     model = ModelConfig()
-    assert model.backbone == "resnet12"
-    assert model.image_size == 84
+    assert model.backbone == "vision_mamba"
+    assert model.image_size == 224
+    assert model.hidden_dim == 192
     assert model.token_dim == 128
     assert model.rho == 0.8
     assert model.tau_q == model.tau_c == 0.5
