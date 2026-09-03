@@ -6,7 +6,7 @@ import argparse
 from pathlib import Path
 
 from .ablations import PECT_ABLATIONS, apply_ablation
-from .config import ExperimentConfig, ModelConfig, RuntimeConfig
+from .config import SUPPORTED_BACKBONES, ExperimentConfig, ModelConfig, RuntimeConfig
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -39,9 +39,6 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--warmup-epochs", "--warmup_epochs", type=int, default=5)
     parser.add_argument("--min-lr", "--min_lr", type=float, default=1e-6)
 
-    # Cac flag nay chua ton tai trong ban goc, them vao vi ExperimentConfig
-    # (config.py) da co san field train_augment / label_smoothing / grad_clip
-    # nhung cli.py chua truyen duoc gia tri cho chung.
     parser.add_argument(
         "--train-augment",
         "--train_augment",
@@ -61,6 +58,44 @@ def build_parser() -> argparse.ArgumentParser:
         type=float,
         default=0.0,
         help="Max gradient norm for clipping (0 disables clipping)",
+    )
+
+    # --- Backbone selection. Not passing this keeps ModelConfig's own
+    # default (currently "vision_mamba") -- pass explicitly to be sure which
+    # architecture a given run actually used, especially now that a 3rd
+    # backbone (mambavision_nvidia) is available.
+    parser.add_argument(
+        "--backbone",
+        choices=sorted(SUPPORTED_BACKBONES),
+        default=None,
+        help="Override ModelConfig's default backbone",
+    )
+    parser.add_argument(
+        "--image-size",
+        "--image_size",
+        type=int,
+        default=None,
+        help="Override ModelConfig's default image_size",
+    )
+    parser.add_argument(
+        "--hidden-dim",
+        "--hidden_dim",
+        type=int,
+        default=None,
+        help="Override ModelConfig's default hidden_dim",
+    )
+    parser.add_argument(
+        "--mambavision-model-name",
+        "--mambavision_model_name",
+        default=None,
+        help="HuggingFace model id for backbone=mambavision_nvidia "
+             "(e.g. nvidia/MambaVision-T-1K)",
+    )
+    parser.add_argument(
+        "--no-freeze-mambavision-backbone",
+        action="store_true",
+        help="Fine-tune the entire pretrained MambaVision backbone instead "
+             "of freezing everything but the last stage (default: frozen)",
     )
 
     parser.add_argument("--seed", type=int, default=42)
@@ -93,6 +128,17 @@ def config_from_args(args: argparse.Namespace) -> ExperimentConfig:
     model = ModelConfig()
     if args.variant:
         model = apply_ablation(model, args.variant)
+
+    if args.backbone is not None:
+        model.backbone = args.backbone
+    if args.image_size is not None:
+        model.image_size = args.image_size
+    if args.hidden_dim is not None:
+        model.hidden_dim = args.hidden_dim
+    if args.mambavision_model_name is not None:
+        model.mambavision_model_name = args.mambavision_model_name
+    if args.no_freeze_mambavision_backbone:
+        model.mambavision_freeze_early_stages = False
 
     samples_name = f"{args.training_samples}samples" if args.training_samples else "allsamples"
     default_name = args.variant or "pect"
