@@ -8,6 +8,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from tim_2026.model._reference.encoders.fsl_mamba_encoder import FSLMambaEncoder
+from tim_2026.model._reference.encoders.mambavision_nvidia_encoder import MambaVisionNvidiaEncoder
 from tim_2026.model._reference.encoders.resnet12_encoder import ResNet12Encoder
 
 try:
@@ -220,9 +221,11 @@ def build_resnet12_family_encoder(
     vision_mamba_depth: int = 12,
     vision_mamba_d_state: int = 16,
     vision_mamba_drop_path: float = 0.1,
+    mambavision_model_name: str = "nvidia/MambaVision-T-1K",
+    mambavision_freeze_early_stages: bool = True,
 ) -> nn.Module:
     """Build the legacy ResNet12 encoder, or one of the additive options
-    (Conv64F / FSL-Mamba / Vision-Mamba)."""
+    (Conv64F / FSL-Mamba / Vision-Mamba / pretrained NVIDIA MambaVision)."""
 
     backbone_name = str(backbone_name).lower()
 
@@ -235,6 +238,13 @@ def build_resnet12_family_encoder(
             d_state=vision_mamba_d_state,
             drop_path_rate=vision_mamba_drop_path,
             pool_output=pool_output,
+        )
+    if backbone_name == "mambavision_nvidia":
+        return MambaVisionNvidiaEncoder(
+            image_size=image_size,
+            model_name=mambavision_model_name,
+            pool_output=pool_output,
+            freeze_early_stages=mambavision_freeze_early_stages,
         )
     if backbone_name == "resnet12":
         return ResNet12Encoder(
