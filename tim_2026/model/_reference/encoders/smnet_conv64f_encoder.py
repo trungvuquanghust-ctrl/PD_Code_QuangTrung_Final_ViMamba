@@ -1,5 +1,5 @@
 """SMNet-exact Conv64F encoder plus a Vision-Mamba backbone, both exposing a
-ResNet12-compatible interface."""
+ResNet12-compatible interface.""" 
 
 from __future__ import annotations
 
