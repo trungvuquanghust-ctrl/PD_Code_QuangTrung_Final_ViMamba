@@ -12,8 +12,12 @@ _LEGACY_PROTOCOL_BACKBONES = {"resnet12", "conv64f", "fsl_mamba", "slim_mamba"}
 # divisible by their patch size, not fixed at 84x84.
 _PATCH_BACKBONES = {"vision_mamba"}
 _VISION_MAMBA_PATCH_SIZE = 16
+# Hierarchical backbones (stem + 4 downsampling stages, stride 32 total) --
+# currently just the pretrained NVIDIA MambaVision.
+_HIERARCHICAL_BACKBONES = {"mambavision_nvidia"}
+_HIERARCHICAL_STRIDE = 32
 
-SUPPORTED_BACKBONES = _LEGACY_PROTOCOL_BACKBONES | _PATCH_BACKBONES
+SUPPORTED_BACKBONES = _LEGACY_PROTOCOL_BACKBONES | _PATCH_BACKBONES | _HIERARCHICAL_BACKBONES
 
 
 @dataclass(slots=True)
@@ -26,6 +30,9 @@ class ModelConfig:
     # 192->640 up-projection adapter that fewshot_common.py would otherwise
     # insert automatically. If you switch backbone back to "resnet12", also
     # set hidden_dim=640 (the original paper-protocol value) and image_size=84.
+    # For "mambavision_nvidia" the real out_channels is discovered at runtime
+    # via a dry-run inside the encoder, so a hidden_dim mismatch here just
+    # triggers the (harmless) 1x1 adapter conv instead of failing.
     hidden_dim: int = 192
     token_dim: int = 128
     use_raw_backbone_tokens: bool = False
@@ -56,6 +63,11 @@ class ModelConfig:
 
     ours_ablation: str = "full"
 
+    # NVIDIA MambaVision-specific options (only used when backbone ==
+    # "mambavision_nvidia"; ignored otherwise).
+    mambavision_model_name: str = "nvidia/MambaVision-T-1K"
+    mambavision_freeze_early_stages: bool = True
+
     def validate(self) -> None:
         backbone = str(self.backbone).lower()
         if backbone not in SUPPORTED_BACKBONES:
@@ -75,6 +87,12 @@ class ModelConfig:
             raise ValueError(
                 f"backbone={backbone!r} uses patch_size={_VISION_MAMBA_PATCH_SIZE}; "
                 f"image_size must be divisible by {_VISION_MAMBA_PATCH_SIZE}, "
+                f"got {self.image_size}"
+            )
+        if backbone in _HIERARCHICAL_BACKBONES and self.image_size % _HIERARCHICAL_STRIDE != 0:
+            raise ValueError(
+                f"backbone={backbone!r} downsamples by a total stride of "
+                f"{_HIERARCHICAL_STRIDE}; image_size must be divisible by that, "
                 f"got {self.image_size}"
             )
 
