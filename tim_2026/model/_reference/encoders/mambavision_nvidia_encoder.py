@@ -9,12 +9,11 @@ License-NC and pretrained weights under CC-BY-NC-SA-4.0 -- both
 non-commercial only. Confirm your use case stays research/non-commercial
 before deploying anything built on top of this encoder.
 
-NOTE ON OUTPUT FORMAT: the exact object returned by
-`AutoModel.from_pretrained(..., trust_remote_code=True)` can vary across
-`transformers`/`mambavision` package versions. `_extract_feature_map` below
-probes a few common shapes defensively and raises a clear error (instead of
-silently mis-shaping data) if none match -- see the debug cell in the
-integration notes for how to inspect the real output once and confirm.
+NOTE ON OUTPUT FORMAT (confirmed via official NVlabs/MambaVision README):
+`AutoModel.from_pretrained(..., trust_remote_code=True)(inputs)` returns a
+2-tuple `(out_avg_pool, features)` where `features` is a LIST of 4 stage
+feature maps (not a single tensor). We take `features[-1]` (the deepest,
+highest-channel stage) as the (B, C, H, W) map fed into PECT.
 """
 
 from __future__ import annotations
@@ -71,12 +70,20 @@ class MambaVisionNvidiaEncoder(nn.Module):
     def _extract_feature_map(self, out) -> torch.Tensor:
         """Normalize the HF AutoModel output into a (B, C, H, W) tensor.
 
-        Tries, in order: tuple/list last element, `.last_hidden_state`,
-        `.hidden_states[-1]`, or a bare tensor. If the result is a token
-        sequence (B, N, C) with N a perfect square, reshapes it back into a
-        spatial grid.
+        Confirmed real output shape (NVlabs/MambaVision README): a 2-tuple
+        `(out_avg_pool, features)` where `features` is a list of 4 stage
+        feature maps. We take the last (deepest) stage. Falls back to a
+        few other shapes defensively for forward-compatibility with future
+        transformers/mambavision releases.
         """
-        if isinstance(out, (tuple, list)):
+        if (
+            isinstance(out, (tuple, list))
+            and len(out) == 2
+            and isinstance(out[1], (tuple, list))
+        ):
+            # (out_avg_pool, features) -- the documented MambaVision format.
+            candidate = out[1][-1]
+        elif isinstance(out, (tuple, list)):
             candidate = out[-1]
         elif hasattr(out, "last_hidden_state") and out.last_hidden_state is not None:
             candidate = out.last_hidden_state
@@ -92,6 +99,13 @@ class MambaVisionNvidiaEncoder(nn.Module):
                 "print(out.__dict__ if hasattr(out, '__dict__') else out)` "
                 "trong Colab de xac dinh dung attribute/key can lay, roi sua "
                 "lai ham _extract_feature_map cho khop."
+            )
+
+        if not torch.is_tensor(candidate):
+            raise RuntimeError(
+                f"Sau khi trich xuat, candidate van khong phai tensor "
+                f"(kieu: {type(candidate)!r}). Cau truc output thuc te khac "
+                "voi dinh dang da xac nhan tu README -- kiem tra lai."
             )
 
         if candidate.dim() == 3:
